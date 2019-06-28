@@ -5,7 +5,6 @@ extern crate time;
 #[macro_use]
 extern crate error_chain;
 
-use std::ascii::AsciiExt;
 use std::cmp;
 use std::env;
 use std::io::{self, stdout, stderr, BufWriter, Write};
@@ -19,7 +18,7 @@ use kafka::client::{KafkaClient, FetchOffset, GroupOffsetStorage};
 /// the lag for a particular consumer group. Dumps the offset/lag of
 /// the monitored topic/group to stdout every few seconds.
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     macro_rules! abort {
         ($e:expr) => {{
@@ -43,7 +42,7 @@ fn main() {
 fn run(cfg: Config) -> Result<()> {
     let mut client = KafkaClient::new(cfg.brokers.clone());
     client.set_group_offset_storage(cfg.offset_storage);
-    try!(client.load_metadata_all());
+    client.load_metadata_all()?;
 
     // ~ if no topic specified, print all available and be done.
     if cfg.topic.is_empty() {
@@ -70,18 +69,18 @@ fn run(cfg: Config) -> Result<()> {
     };
     let mut state = State::new(num_partitions, cfg.commited_not_consumed);
     let mut printer = Printer::new(stdout(), &cfg);
-    try!(printer.print_head(num_partitions));
+    printer.print_head(num_partitions)?;
 
     // ~ initialize the state
     let mut first_time = true;
     loop {
         let t = time::now();
-        try!(state.update_partitions(&mut client, &cfg.topic, &cfg.group));
+        state.update_partitions(&mut client, &cfg.topic, &cfg.group)?;
         if first_time {
             state.curr_to_prev();
             first_time = false;
         }
-        try!(printer.print_offsets(&t, &state.offsets));
+        printer.print_offsets(&t, &state.offsets)?;
         thread::sleep(cfg.period);
     }
 }
@@ -123,7 +122,7 @@ impl State {
         group: &str,
     ) -> Result<()> {
         // ~ get the latest topic offsets
-        let latests = try!(client.fetch_topic_offsets(topic, FetchOffset::Latest));
+        let latests = client.fetch_topic_offsets(topic, FetchOffset::Latest)?;
 
         for l in latests {
             let off = self.offsets.get_mut(l.partition as usize).expect(
@@ -135,7 +134,7 @@ impl State {
 
         if !group.is_empty() {
             // ~ get the current group offsets
-            let groups = try!(client.fetch_group_topic_offsets(group, topic));
+            let groups = client.fetch_group_topic_offsets(group, topic)?;
             for g in groups {
                 let off = self.offsets.get_mut(g.partition as usize).expect(
                     "[group offset] non-existent partition",
@@ -223,7 +222,7 @@ impl<W: Write> Printer<W> {
         }
         {
             // ~ print
-            try!(self.out.write_all(self.out_buf.as_bytes()));
+            self.out.write_all(self.out_buf.as_bytes())?;
             Ok(())
         }
     }
@@ -282,7 +281,7 @@ impl<W: Write> Printer<W> {
             }
         }
         self.out_buf.push('\n');
-        try!(self.out.write_all(self.out_buf.as_bytes()));
+        self.out.write_all(self.out_buf.as_bytes())?;
         Ok(())
     }
 }

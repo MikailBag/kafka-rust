@@ -14,7 +14,7 @@ use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
 /// This is a very simple command line application reading from a
 /// specific kafka topic and dumping the messages to standard output.
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     let cfg = match Config::from_cmdline() {
         Ok(cfg) => cfg,
@@ -43,7 +43,7 @@ fn process(cfg: Config) -> Result<()> {
         for topic in cfg.topics {
             cb = cb.with_topic(topic);
         }
-        try!(cb.create())
+        cb.create()?
     };
 
     let stdout = io::stdout();
@@ -52,7 +52,7 @@ fn process(cfg: Config) -> Result<()> {
 
     let do_commit = !cfg.no_commit;
     loop {
-        for ms in try!(c.poll()).iter() {
+        for ms in c.poll()?.iter() {
             for m in ms.messages() {
                 // ~ clear the output buffer
                 unsafe { buf.set_len(0) };
@@ -61,12 +61,12 @@ fn process(cfg: Config) -> Result<()> {
                 buf.extend_from_slice(m.value);
                 buf.push(b'\n');
                 // ~ write to output channel
-                try!(stdout.write_all(&buf));
+                stdout.write_all(&buf)?;
             }
             let _ = c.consume_messageset(ms);
         }
         if do_commit {
-            try!(c.commit_consumed());
+            c.commit_consumed()?;
         }
     }
 }

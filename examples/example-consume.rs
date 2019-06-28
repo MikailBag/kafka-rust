@@ -9,7 +9,7 @@ use kafka::error::Error as KafkaError;
 /// that messages must be marked and commited as consumed to ensure
 /// only once delivery.
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     let broker = "localhost:9092".to_owned();
     let topic = "my-topic".to_owned();
@@ -21,17 +21,16 @@ fn main() {
 }
 
 fn consume_messages(group: String, topic: String, brokers: Vec<String>) -> Result<(), KafkaError> {
-    let mut con = try!(
+    let mut con = 
         Consumer::from_hosts(brokers)
             .with_topic(topic)
             .with_group(group)
             .with_fallback_offset(FetchOffset::Earliest)
             .with_offset_storage(GroupOffsetStorage::Kafka)
-            .create()
-    );
+            .create()?;
 
     loop {
-        let mss = try!(con.poll());
+        let mss = con.poll()?;
         if mss.is_empty() {
             println!("No messages available right now.");
             return Ok(());
@@ -43,6 +42,6 @@ fn consume_messages(group: String, topic: String, brokers: Vec<String>) -> Resul
             }
             let _ = con.consume_messageset(ms);
         }
-        try!(con.commit_consumed());
+       con.commit_consumed()?;
     }
 }

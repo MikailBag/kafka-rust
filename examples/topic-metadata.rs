@@ -12,7 +12,7 @@ use kafka::client::{KafkaClient, FetchOffset};
 
 /// Dumps available topic metadata to stdout.
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     let cfg = match Config::from_cmdline() {
         Ok(cfg) => cfg,
@@ -44,7 +44,7 @@ impl Default for Offsets {
 fn dump_metadata(cfg: Config) -> Result<(), String> {
     // ~ establish connection to kafka
     let mut client = KafkaClient::new(cfg.brokers);
-    try!(client.load_metadata_all().map_err(|e| e.to_string()));
+    client.load_metadata_all().map_err(|e| e.to_string())?;
     // ~ determine the list of topics we're supposed to report about
     let topics = if cfg.topics.is_empty() {
         let topics = client.topics();
@@ -61,11 +61,11 @@ fn dump_metadata(cfg: Config) -> Result<(), String> {
     let (topic_width, offsets) = {
         let mut topic_width = 0;
         let mut m = HashMap::with_capacity(topics.len());
-        let mut offsets = try!(client.fetch_offsets(&topics, FetchOffset::Latest).map_err(
+        let mut offsets = client.fetch_offsets(&topics, FetchOffset::Latest).map_err(
             |e| {
                 e.to_string()
             },
-        ));
+        )?;
         for (topic, offsets) in offsets {
             topic_width = cmp::max(topic_width, topic.len());
             let mut offs = Vec::with_capacity(offsets.len());
@@ -97,11 +97,10 @@ fn dump_metadata(cfg: Config) -> Result<(), String> {
             m.insert(topic, offs);
         }
 
-        offsets = try!(
+        offsets = 
             client
                 .fetch_offsets(&topics, FetchOffset::Earliest)
-                .map_err(|e| e.to_string())
-        );
+                .map_err(|e| e.to_string())?;
 
         for (topic, offsets) in offsets {
             let mut offs = m.get_mut(&topic).expect("unknown topic");

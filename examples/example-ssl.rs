@@ -17,11 +17,10 @@ mod example {
 
     use self::kafka::client::{FetchOffset, KafkaClient, SecurityConfig};
 
-    use self::openssl::ssl::{SslConnectorBuilder, SslMethod, SSL_VERIFY_PEER};
-    use self::openssl::x509::X509_FILETYPE_PEM;
+    use self::openssl::ssl::{SslConnector, SslMethod, SslVerifyMode, SslFiletype};
 
     pub fn main() {
-        env_logger::init().unwrap();
+        env_logger::init();
 
         // ~ parse the command line arguments
         let cfg = match Config::from_cmdline() {
@@ -33,16 +32,16 @@ mod example {
         };
 
         // ~ OpenSSL offers a variety of complex configurations. Here is an example:
-        let mut builder = SslConnectorBuilder::new(SslMethod::tls()).unwrap();
+        let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
         {
-            let mut ctx = builder.builder_mut();
+            let mut ctx = &mut *builder;
             ctx.set_cipher_list("DEFAULT").unwrap();
-            ctx.set_verify(SSL_VERIFY_PEER);
+            ctx.set_verify(SslVerifyMode::PEER);
             if let (Some(ccert), Some(ckey)) = (cfg.client_cert, cfg.client_key) {
                 info!("loading cert-file={}, key-file={}", ccert, ckey);
 
-                ctx.set_certificate_file(ccert, X509_FILETYPE_PEM).unwrap();
-                ctx.set_private_key_file(ckey, X509_FILETYPE_PEM).unwrap();
+                ctx.set_certificate_file(ccert, SslFiletype::PEM).unwrap();
+                ctx.set_private_key_file(ckey, SslFiletype::PEM).unwrap();
                 ctx.check_private_key().unwrap();
             }
 

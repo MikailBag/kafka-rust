@@ -3,16 +3,28 @@
 use std::io;
 
 #[cfg(feature = "security")]
-use openssl::ssl::{self, Error as SslError};
+use openssl::ssl::{self};
 #[cfg(feature = "security")]
 use openssl::error::ErrorStack;
 
-/// The various errors this library can produce.
+// FIXME: Error Ssl foreign_link should contain underlying error
+#[derive(Debug)]
+pub struct EmptyInfo{}
+
+impl std::fmt::Display for EmptyInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl std::error::Error for EmptyInfo {}
+
+// The various errors this library can produce.
 error_chain! {
     foreign_links {
         Io(io::Error) #[doc="Input/Output error while communicating with Kafka"];
 
-        Ssl(SslError) #[cfg(feature = "security")] #[doc="An error as reported by OpenSsl"];
+        Ssl(EmptyInfo) #[cfg(feature = "security")] #[doc="An error as reported by OpenSsl"];
 
         SslHandshake(ErrorStack) #[cfg(feature = "security")] #[doc="An error as reported by OpenSsl handshake"];
 
@@ -202,8 +214,8 @@ impl<S> From<ssl::HandshakeError<S>> for Error {
     fn from(err: ssl::HandshakeError<S>) -> Error {
         match err {
             ssl::HandshakeError::SetupFailure(e) => From::from(e),
-            ssl::HandshakeError::Failure(s) |
-            ssl::HandshakeError::Interrupted(s) => from_sslerror_ref(s.error()).into(),
+            ssl::HandshakeError::Failure(_) |
+            ssl::HandshakeError::WouldBlock(_) => Error::from(EmptyInfo {}),
         }
     }
 }
@@ -217,7 +229,7 @@ impl Clone for Error {
                 ErrorKind::TopicPartitionError(topic.clone(), partition, error_code).into()
             }
             #[cfg(feature = "security")]
-            &Error(ErrorKind::Ssl(ref x), _) => from_sslerror_ref(x).into(),
+            &Error(ErrorKind::Ssl(_), _) => ErrorKind::Ssl(EmptyInfo {}).into(),
             #[cfg(feature = "security")]
             &Error(ErrorKind::SslHandshake(ref x), _) => ErrorKind::SslHandshake(x.clone()).into(),
             &Error(ErrorKind::UnsupportedProtocol, _) => ErrorKind::UnsupportedProtocol.into(),
@@ -233,19 +245,8 @@ impl Clone for Error {
             &Error(ErrorKind::NoTopicsAssigned, _) => ErrorKind::NoTopicsAssigned.into(),
             &Error(ErrorKind::InvalidDuration, _) => ErrorKind::InvalidDuration.into(),
             &Error(ErrorKind::Msg(ref msg), _) => ErrorKind::Msg(msg.clone()).into(),
+            &Error(ErrorKind::__Nonexhaustive {}, _) => ErrorKind::__Nonexhaustive {}.into()
         }
-    }
-}
-
-#[cfg(feature = "security")]
-fn from_sslerror_ref(err: &ssl::Error) -> ErrorKind {
-    match err {
-        &SslError::ZeroReturn => ErrorKind::Ssl(SslError::ZeroReturn),
-        &SslError::WantRead(ref e) => ErrorKind::Ssl(SslError::WantRead(clone_ioe(e))),
-        &SslError::WantWrite(ref e) => ErrorKind::Ssl(SslError::WantWrite(clone_ioe(e))),
-        &SslError::WantX509Lookup => ErrorKind::Ssl(SslError::WantX509Lookup),
-        &SslError::Stream(ref e) => ErrorKind::Ssl(SslError::Stream(clone_ioe(e))),
-        &SslError::Ssl(ref es) => ErrorKind::Ssl(SslError::Ssl(es.clone())),
     }
 }
 
